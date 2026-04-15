@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tournament Tracker Pro</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<style>
+body { font-family: Inter, Arial; background:#0b1220; color:#e5e7eb; margin:0; }
+h1 { text-align:center; margin:16px 0; }
+
+.top-tabs { display:flex; background:#020617; border-bottom:2px solid #1f2937; }
+
+.tab-btn {
+    flex:1; padding:14px; border:none;
+    background:transparent; color:#9ca3af;
+    cursor:pointer;
+}
+
+.tab-btn.active {
+    background:#2563eb; color:white;
+    font-weight:bold; border-bottom:4px solid #60a5fa;
+}
+
+.container { display:flex; flex-wrap:wrap; gap:16px; padding:16px; }
+.full { width:100%; }
+.card { background:#111827; padding:14px; border-radius:14px; }
+
+table { width:100%; border-collapse: collapse; margin-top:10px; font-size:13px; }
+th { background:#1f2937; }
+th, td { border:1px solid #1f2937; padding:6px; text-align:center; }
+
+input { width:60px; background:#020617; border:1px solid #1f2937; color:white; }
+
+button {
+    margin:4px; padding:6px 10px;
+    border-radius:8px; border:none;
+    background:#2563eb; color:white; cursor:pointer;
+}
+
+.tab { display:none; }
+.tab.active { display:block; }
+
+/* PRINT */
+@media print {
+    body { background:white !important; color:black !important; }
+
+    .top-tabs, .save-area, button {
+        display:none !important;
+    }
+
+    .tab { display:none !important; }
+    .tab.print-active { display:block !important; }
+
+    .card, table { page-break-inside: avoid; }
+}
+</style>
+</head>
+
+<body>
+
+<h1>Tournament Tracker Pro</h1>
+
+<div class="top-tabs">
+<button class="tab-btn active" onclick="showTab('teams', this)">Teams</button>
+<button class="tab-btn" onclick="showTab('players', this)">Players</button>
+<button class="tab-btn" onclick="showTab('leaderboard', this)">Leaderboard</button>
+</div>
+
+<!-- TEAMS -->
+<div id="teams" class="tab active">
+<div class="container">
+
+<div class="card full">
+<h2>Bracket A</h2>
+<button onclick="sortTeams('bracketA')">Sort Winrate</button>
+<table id="bracketA">
+<tr><th>Team</th><th>W</th><th>L</th><th>WR%</th></tr>
+</table>
+</div>
+
+<div class="card full">
+<h2>Bracket B</h2>
+<button onclick="sortTeams('bracketB')">Sort Winrate</button>
+<table id="bracketB">
+<tr><th>Team</th><th>W</th><th>L</th><th>WR%</th></tr>
+</table>
+</div>
+
+</div>
+</div>
+
+<!-- PLAYERS -->
+<div id="players" class="tab">
+
+<div style="text-align:center;">
+<button onclick="sortPlayers('game')">Game No.</button>
+<button onclick="sortPlayers('kda')">KDA</button>
+<button onclick="sortPlayers('k')">Kills</button>
+<button onclick="sortPlayers('a')">Assist</button>
+<button onclick="sortPlayers('hd')">Hero DMG</button>
+<button onclick="sortPlayers('gpm')">GPM</button>
+<button onclick="sortPlayers('dt')">Damage Taken</button>
+</div>
+
+<div class="container" id="playerContainer"></div>
+</div>
+
+<!-- LEADERBOARD -->
+<div id="leaderboard" class="tab">
+<div class="container">
+<div class="card full">
+<h2>MVP Leaderboard</h2>
+<table id="mvpTable">
+<tr><th>Rank</th><th>Player</th><th>KDA</th><th>TF%</th><th>Score</th></tr>
+</table>
+</div>
+</div>
+</div>
+
+<!-- SAVE -->
+<div class="save-area" style="text-align:center; padding:20px;">
+<button onclick="savePDF()">Save PDF</button>
+<button onclick="saveExcel()">Save Excel</button>
+<button onclick="saveTXT()">Save TXT</button>
+</div>
+
+<script>
+
+let currentTab = "teams";
+
+function showTab(id, btn){
+currentTab = id;
+document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+document.getElementById(id).classList.add("active");
+document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+btn.classList.add("active");
+}
+
+// DATA
+const teamsA=["Team 1","Team 3","Team 5","Team 7","Team 9"];
+const teamsB=["Team 2","Team 4","Team 6","Team 8","Team 10"];
+
+const players={
+"Team 1":["Vortex","Nyx","Razor","Kaizen","Blitz","Phantom"],
+"Team 2":["Zyrex","Kairo","Onyx","Havoc","Striker","Zephyr"],
+"Team 3":["Riven","Draven","Eclipse","Nova","Reaper","Khaos"],
+"Team 4":["Venom","Cipher","Wraith","Stryke","Orion","Inferno"],
+"Team 5":["Ziven","Flux","Pyro","Saber","Kuro","Titan"],
+"Team 6":["Frost","Glitch","Arcane","Dagger","Tempest","Surge"],
+"Team 7":["Haze","Lynx","Delta","Kronos","Vandal","Apex"],
+"Team 8":["Rift","Obsidian","Hex","Pulse","Enigma","Mirage"],
+"Team 9":["Spectre","Zero","Zane","Vex","Kade","Raze"],
+"Team 10":["Jynx","Dray","Nyro","Zex","Kiro","Varn"]
+};
+
+// TEAMS
+function createRow(t){
+return `<tr>
+<td>${t}</td>
+<td><input class="win"></td>
+<td><input class="loss"></td>
+<td class="wr">0</td>
+</tr>`;
+}
+
+function loadTeams(){
+teamsA.forEach(t=>bracketA.innerHTML+=createRow(t));
+teamsB.forEach(t=>bracketB.innerHTML+=createRow(t));
+}
+
+function updateTeams(){
+document.querySelectorAll("#teams tr").forEach(r=>{
+let w=r.querySelector(".win"),l=r.querySelector(".loss");
+if(w&&l){
+let win=+w.value||0,loss=+l.value||0;
+let wr=(win+loss)?((win/(win+loss))*100).toFixed(1):0;
+r.querySelector(".wr").innerText=wr;
+}
+});
+}
+
+function sortTeams(id){
+let rows=[...document.getElementById(id).rows].slice(1);
+rows.sort((a,b)=>+b.querySelector(".wr").innerText-+a.querySelector(".wr").innerText);
+rows.forEach(r=>document.getElementById(id).appendChild(r));
+}
+
+// PLAYERS
+function createPlayer(team){
+let html=`<div class="card full team-block">
+<h3>${team} | Game No: <input class="gid"></h3>
+<table>
+<tr>
+<th>Player</th><th>K</th><th>D</th><th>A</th><th>KDA</th>
+<th>TF%</th><th>Grade</th><th>Hero DMG</th>
+<th>Turret DMG</th><th>Consec Kills</th><th>GPM</th><th>DMG Taken</th>
+</tr>`;
+
+players[team].forEach(p=>{
+html+=`<tr>
+<td>${p}</td>
+<td><input class="k"></td>
+<td><input class="d"></td>
+<td><input class="a"></td>
+<td class="kda">0</td>
+<td><input class="tf"></td>
+<td><input></td>
+<td><input class="hd"></td>
+<td><input></td>
+<td><input></td>
+<td><input class="gpm"></td>
+<td><input class="dt"></td>
+</tr>`;
+});
+
+html+="</table></div>";
+return html;
+}
+
+function loadPlayers(){
+Object.keys(players).forEach(t=>playerContainer.innerHTML+=createPlayer(t));
+}
+
+function updatePlayers(){
+document.querySelectorAll(".team-block tr").forEach(r=>{
+let k=r.querySelector(".k"),d=r.querySelector(".d"),a=r.querySelector(".a");
+if(k&&d&&a){
+let val=((+k.value||0)+(+a.value||0))/((+d.value||0)+1);
+r.querySelector(".kda").innerText=val.toFixed(2);
+}
+});
+}
+
+// SORT PLAYERS
+function sortPlayers(type){
+let blocks=[...document.querySelectorAll(".team-block")];
+
+blocks.sort((a,b)=>{
+
+if(type==="game"){
+return (+b.querySelector(".gid")?.value||0) - (+a.querySelector(".gid")?.value||0);
+}
+
+let sum=(block,cls)=>[...block.querySelectorAll("."+cls)].reduce((t,i)=>t+(+i.value||0),0);
+
+if(type==="k") return sum(b,"k")-sum(a,"k");
+if(type==="a") return sum(b,"a")-sum(a,"a");
+if(type==="hd") return sum(b,"hd")-sum(a,"hd");
+if(type==="gpm") return sum(b,"gpm")-sum(a,"gpm");
+if(type==="dt") return sum(b,"dt")-sum(a,"dt");
+
+if(type==="kda"){
+let avg=(block)=>{
+let total=0,count=0;
+block.querySelectorAll("tr").forEach(r=>{
+let k=r.querySelector(".k"),d=r.querySelector(".d"),a=r.querySelector(".a");
+if(k&&d&&a){
+total+=((+k.value||0)+(+a.value||0))/((+d.value||0)+1);
+count++;
+}
+});
+return count?total/count:0;
+};
+return avg(b)-avg(a);
+}
+
+});
+
+playerContainer.innerHTML="";
+blocks.forEach(b=>playerContainer.appendChild(b));
+}
+
+// PDF
+function savePDF(){
+document.querySelectorAll(".tab").forEach(t=>t.classList.remove("print-active"));
+document.getElementById(currentTab).classList.add("print-active");
+window.print();
+document.getElementById(currentTab).classList.remove("print-active");
+}
+
+// EXCEL
+function saveExcel(){
+let wb = XLSX.utils.book_new();
+document.querySelectorAll("table").forEach((t,i)=>{
+let ws = XLSX.utils.table_to_sheet(t);
+XLSX.utils.book_append_sheet(wb,ws,"Sheet"+(i+1));
+});
+XLSX.writeFile(wb,"tournament.xlsx");
+}
+
+// TXT
+function saveTXT(){
+let text="";
+document.querySelectorAll("table").forEach(t=>{
+t.querySelectorAll("tr").forEach(r=>{
+text += [...r.children].map(td=>td.innerText).join(" | ") + "\n";
+});
+text+="\n";
+});
+let blob = new Blob([text], {type:"text/plain"});
+let link = document.createElement("a");
+link.href = URL.createObjectURL(blob);
+link.download = "tournament.txt";
+link.click();
+}
+
+// INIT
+loadTeams();
+loadPlayers();
+
+setInterval(()=>{
+updateTeams();
+updatePlayers();
+},1000);
+
+</script>
+
+</body>
+</html>

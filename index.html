@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Tournament Tracker Pro</title>
+<title>Panukz Premier League</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
@@ -45,22 +45,16 @@ button {
 /* PRINT */
 @media print {
     body { background:white !important; color:black !important; }
-
-    .top-tabs, .save-area, button {
-        display:none !important;
-    }
-
+    .top-tabs, .save-area, button { display:none !important; }
     .tab { display:none !important; }
     .tab.print-active { display:block !important; }
-
-    .card, table { page-break-inside: avoid; }
 }
 </style>
 </head>
 
 <body>
 
-<h1>Tournament Tracker Pro</h1>
+<h1>PANUKZ PREMIER LEAGUE</h1>
 
 <div class="top-tabs">
 <button class="tab-btn active" onclick="showTab('teams', this)">Teams</button>
@@ -113,7 +107,14 @@ button {
 <div class="card full">
 <h2>MVP Leaderboard</h2>
 <table id="mvpTable">
-<tr><th>Rank</th><th>Player</th><th>KDA</th><th>TF%</th><th>Score</th></tr>
+<tr>
+<th>Rank</th>
+<th>Player</th>
+<th>KDA</th>
+<th>TF%</th>
+<th>Grade</th>
+<th>Score</th>
+</tr>
 </table>
 </div>
 </div>
@@ -206,7 +207,7 @@ html+=`<tr>
 <td><input class="a"></td>
 <td class="kda">0</td>
 <td><input class="tf"></td>
-<td><input></td>
+<td><input class="grade"></td>
 <td><input class="hd"></td>
 <td><input></td>
 <td><input></td>
@@ -233,46 +234,65 @@ r.querySelector(".kda").innerText=val.toFixed(2);
 });
 }
 
-// SORT PLAYERS
-function sortPlayers(type){
-let blocks=[...document.querySelectorAll(".team-block")];
+// LEADERBOARD
+function updateLeaderboard(){
 
-blocks.sort((a,b)=>{
+let data=[];
 
-if(type==="game"){
-return (+b.querySelector(".gid")?.value||0) - (+a.querySelector(".gid")?.value||0);
-}
+document.querySelectorAll(".team-block tr").forEach(r=>{
+let name=r.children[0]?.innerText;
+let k=r.querySelector(".k");
+let d=r.querySelector(".d");
+let a=r.querySelector(".a");
+let tf=r.querySelector(".tf");
+let gradeInput=r.querySelector(".grade");
 
-let sum=(block,cls)=>[...block.querySelectorAll("."+cls)].reduce((t,i)=>t+(+i.value||0),0);
+if(k&&d&&a&&name){
 
-if(type==="k") return sum(b,"k")-sum(a,"k");
-if(type==="a") return sum(b,"a")-sum(a,"a");
-if(type==="hd") return sum(b,"hd")-sum(a,"hd");
-if(type==="gpm") return sum(b,"gpm")-sum(a,"gpm");
-if(type==="dt") return sum(b,"dt")-sum(a,"dt");
+let kills=+k.value||0;
+let deaths=+d.value||0;
+let assists=+a.value||0;
+let tfv=+tf?.value||0;
+let grade=+gradeInput?.value||0;
 
-if(type==="kda"){
-let avg=(block)=>{
-let total=0,count=0;
-block.querySelectorAll("tr").forEach(r=>{
-let k=r.querySelector(".k"),d=r.querySelector(".d"),a=r.querySelector(".a");
-if(k&&d&&a){
-total+=((+k.value||0)+(+a.value||0))/((+d.value||0)+1);
-count++;
+let kda=(kills+assists)/(deaths+1);
+
+// scoring formula
+let score=(kda*3)+(tfv*0.3)+(grade*1.5);
+
+data.push({
+name,
+kda:kda.toFixed(2),
+tf:tfv.toFixed(1),
+grade:grade.toFixed(1),
+score
+});
+
 }
 });
-return count?total/count:0;
-};
-return avg(b)-avg(a);
-}
 
+data.sort((a,b)=>b.score-a.score);
+
+let table=document.getElementById("mvpTable");
+table.innerHTML=`<tr>
+<th>Rank</th><th>Player</th><th>KDA</th><th>TF%</th><th>Grade</th><th>Score</th>
+</tr>`;
+
+data.forEach((p,i)=>{
+table.innerHTML+=`
+<tr>
+<td>${i+1}</td>
+<td>${p.name}</td>
+<td>${p.kda}</td>
+<td>${p.tf}</td>
+<td>${p.grade}</td>
+<td>${p.score.toFixed(2)}</td>
+</tr>`;
 });
 
-playerContainer.innerHTML="";
-blocks.forEach(b=>playerContainer.appendChild(b));
 }
 
-// PDF
+// SAVE
 function savePDF(){
 document.querySelectorAll(".tab").forEach(t=>t.classList.remove("print-active"));
 document.getElementById(currentTab).classList.add("print-active");
@@ -280,7 +300,6 @@ window.print();
 document.getElementById(currentTab).classList.remove("print-active");
 }
 
-// EXCEL
 function saveExcel(){
 let wb = XLSX.utils.book_new();
 document.querySelectorAll("table").forEach((t,i)=>{
@@ -290,7 +309,6 @@ XLSX.utils.book_append_sheet(wb,ws,"Sheet"+(i+1));
 XLSX.writeFile(wb,"tournament.xlsx");
 }
 
-// TXT
 function saveTXT(){
 let text="";
 document.querySelectorAll("table").forEach(t=>{
@@ -313,6 +331,7 @@ loadPlayers();
 setInterval(()=>{
 updateTeams();
 updatePlayers();
+updateLeaderboard();
 },1000);
 
 </script>
